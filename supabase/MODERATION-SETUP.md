@@ -69,7 +69,7 @@ if (response.status === 403) {
 
 The Edge Function uses the trusted Cloudflare connecting-IP header, checks the IP restriction table, and associates only a short SHA-256 fingerprint with the live session. It does not accept arbitrary `X-Forwarded-For` values and does not store raw IPs. The admin page can block an active visitor's fingerprint directly. A network may be shared by multiple people.
 
-**Important:** The frontend source now calls both endpoints, but the Live visitors tab will not populate until the updated NamelessAI deployment is live and visitors load it. The app checks the Edge Function response and blocks the UI on HTTP 403.
+**Important:** The frontend source now calls both endpoints, but the Live visitors tab will not populate until the updated NamelessAI deployment is live and visitors load it. The app checks the Edge Function response and blocks the UI on HTTP 403. The `/api/chat` server route also checks Vercel's trusted `x-real-ip` / `x-forwarded-for` client address against the IP restriction table on every chat request; keep `SUPABASE_SERVICE_ROLE_KEY` configured as a server-only Vercel environment variable for this check.
 
 ## Moderation behavior
 
