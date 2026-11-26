@@ -144,8 +144,8 @@ begin
  end if;
  delete from public.nl_blocked_guest_sessions where expires_at<=now();
  insert into public.nl_live_visitors(session_id,user_id,display_name,user_agent,last_seen)
- values(p_session_id,p_user_id,left(coalesce(p_name,'Guest'),80),left(coalesce(p_user_agent,''),300),now())
- on conflict(session_id) do update set user_id=excluded.user_id,display_name=excluded.display_name,user_agent=excluded.user_agent,last_seen=now();
+ values(p_session_id,auth.uid(),left(coalesce(p_name,'Guest'),80),left(coalesce(p_user_agent,''),300),now())
+ on conflict(session_id) do update set user_id=auth.uid(),display_name=excluded.display_name,user_agent=excluded.user_agent,last_seen=now();
  return jsonb_build_object('allowed',true);
 end $$;
 
