@@ -86,7 +86,8 @@ begin
    'id',id,'action',action,'target_user_id',target_user_id,'target_session_id',target_session_id,
    'reason',reason,'admin_username',admin_username,'created_at',created_at,'details',details
   ) order by created_at desc) from (select * from public.nl_moderation_audit order by created_at desc limit 150) a),'[]'::jsonb),
-  'admin',v_admin
+  'admin',v_admin,
+  'admin_role',(select role from public.admin_accounts where username=v_admin)
  ) into v_result;
  return v_result;
 end $$;
