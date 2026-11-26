@@ -5,8 +5,8 @@
  * - The anon key is public by design; never put the service_role key in this file.
  */
 window.NL_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
+  SUPABASE_URL: "https://nzaelikbjumaidaombmp.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_IupVMhCmigAk4n5bTbRrjg_Fr05v-HE",
   EMAIL_DOMAIN: "namelesslabs.in.net",   // username "chethan" -> chethan@namelesslabs.in.net in Supabase Auth
   SESSION_HOURS: 8,
   IDLE_MINUTES: 30,
