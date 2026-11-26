@@ -147,7 +147,20 @@ end $$;
 create or replace function public.nl_visitor_heartbeat(p_session_id uuid,p_name text default 'Guest',p_user_agent text default null,p_user_id uuid default null)
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
+declare v_auth_session uuid;
 begin
+ if auth.uid() is not null then
+  begin
+   v_auth_session:=nullif(auth.jwt()->>'session_id','')::uuid;
+  exception when others then
+   v_auth_session:=null;
+  end;
+  if v_auth_session is null or not exists(
+   select 1 from auth.sessions s where s.id=v_auth_session and s.user_id=auth.uid()
+  ) then
+   return jsonb_build_object('allowed',false,'reason','auth_session_revoked');
+  end if;
+ end if;
  if exists(select 1 from public.nl_blocked_guest_sessions where session_id=p_session_id and expires_at>now()) then
   return jsonb_build_object('allowed',false,'reason','session_kicked');
  end if;
@@ -157,7 +170,6 @@ begin
  on conflict(session_id) do update set user_id=auth.uid(),display_name=excluded.display_name,user_agent=excluded.user_agent,last_seen=now();
  return jsonb_build_object('allowed',true);
 end $$;
-
 create or replace function public.nl_kick_guest(p_token text,p_session_id uuid,p_reason text default 'Kicked by administrator')
 returns jsonb language plpgsql security definer set search_path = ''
 as $$
