@@ -2,6 +2,14 @@
 -- Applied to the connected Supabase project. Keep admin operations behind
 -- the custom admin session token; never expose the service-role key in a browser.
 
+-- Existing custom admin auth RPCs use pgcrypto from the extensions schema.
+-- Pin that schema in their SECURITY DEFINER search paths so admin re-auth works.
+alter function public.admin_login(text,text) set search_path = public, extensions, pg_temp;
+alter function public.admin_session(text) set search_path = public, extensions, pg_temp;
+alter function public.admin_dashboard(text) set search_path = public, extensions, pg_temp;
+alter function public.admin_set_tier(text,uuid,text) set search_path = public, extensions, pg_temp;
+alter function public.admin_set_banned(text,uuid,boolean) set search_path = public, extensions, pg_temp;
+
 create table if not exists public.nl_user_moderation (
   user_id uuid primary key references auth.users(id) on delete cascade,
   rank text not null default 'User' check (rank in ('Owner','Admin','Moderator','Premium','User')),
