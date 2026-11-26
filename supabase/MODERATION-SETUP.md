@@ -1,32 +1,84 @@
 # Nameless Labs moderation rollout
 
-## 1. Apply the database migration
+## Live Supabase deployment
 
-In Supabase Dashboard → SQL Editor, run the complete `supabase/moderation.sql` file after the existing `supabase/schema.sql`. It creates moderation state, live visitor heartbeats, IP restriction digests and an append-only audit trail.
+The moderation schema has been applied to the connected Supabase project `nzaelikbjumaidaombmp`. The `ip-guard` Edge Function is deployed (version 2).
 
-All administrator RPCs verify `public.is_admin()` on the server. Do not add direct table write policies and never put the Supabase service-role key in browser code.
+The schema creates:
+- Account rank and mute state in `nl_user_moderation`
+- Live browser sessions in `nl_live_visitors`
+- 24-hour guest-session kick blocks
+- Temporary IP restrictions stored as SHA-256 fingerprints
+- A moderation audit trail
 
-## 2. Open the console
+All moderation RPCs validate the existing custom admin session token against `admin_sessions` and `admin_accounts`. Only the OWNER admin can change ranks or create/remove IP restrictions. Existing Supabase admin accounts are protected from moderation. Raw IP addresses are not stored.
 
-After the migration is applied, sign in to the existing Supabase-backed admin dashboard and open **Moderation center**, or visit `/admin-namelesslabs/moderation.html`.
+## Open the console
 
-The moderation page intentionally refuses local/demo sessions. The browser role is not trusted for authorization; the RPC checks the authenticated Supabase user against `admin_roles`.
+Sign in through the existing Nameless Labs dashboard, then open **Moderation center**, or visit `/admin-namelesslabs/moderation.html`.
 
-## 3. Show anonymous visitors
+The page uses the existing `nl_session` session object and calls these live RPCs:
+- `nl_moderation_overview`
+- `nl_moderate_user`
+- `nl_kick_guest`
+- `nl_restrict_ip`
+- `nl_restrict_visitor_ip`
+- `nl_remove_ip_restriction`
 
-The public NamelessAI application must create a random UUID for each browser session and call `visitor_heartbeat` periodically (about every 30 seconds), passing the UUID, a display label and a short user-agent string. Stop heartbeats when the session ends. Check for an RPC error: a kicked session is rejected for 24 hours. Do not use IP addresses as visitor identity.
+## Visitor tracking integration still required
 
-## 4. Enforce IP restrictions
+The public NamelessAI frontend must send a heartbeat every 30 seconds or so using the signed-in Supabase client (or anonymous client for guests):
 
-Deploy `supabase/functions/ip-guard/index.ts` and call it from a trusted server-side request path before allowing traffic into the public app. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as Edge Function secrets. The function reads the connecting IP from trusted proxy headers and checks the server-side SHA-256 digest. Ensure the hosting proxy overwrites incoming forwarding headers; never trust arbitrary client-supplied `X-Forwarded-For`.
+```ts
+const { data, error } = await supabase.rpc('nl_visitor_heartbeat', {
+  p_session_id: browserSessionUuid,
+  p_name: displayName || 'Guest',
+  p_user_agent: navigator.userAgent,
+});
+if (error || data?.allowed === false) {
+  // Stop the current session and show the moderation message.
+}
+```
 
-This is an enforcement endpoint, not a transparent proxy. Your app/backend must invoke it for requests that need IP enforcement and reject the request when it returns HTTP 403 or 503. Do not call it directly from browser JavaScript.
+Generate `browserSessionUuid` once per browser tab/session using `crypto.randomUUID()` and keep it in `sessionStorage`. The database derives the authenticated user from the Supabase JWT; it does not trust a caller-supplied user ID.
 
-## 5. Moderation semantics and safeguards
+## IP capture and enforcement integration still required
 
-- Rank is an application rank stored in `user_moderation`; it does not grant Supabase admin-console access. Console access remains controlled by `admin_roles`.
-- Mute is recorded as a moderation state. The chat/API backend must check `muted_until` before accepting messages.
-- Ban updates Supabase Auth's ban expiry and revokes current sessions.
-- Kick revokes current Supabase sessions. A guest kick blocks that specific heartbeat session UUID for 24 hours.
-- IP restrictions are temporary and stored as digests. Shared IPs can represent many people, so use short durations and a documented reason.
-- Review the audit log after every action. Protect administrator accounts separately with MFA and least-privilege roles.
+The deployed Edge Function endpoint is:
+
+`https://nzaelikbjumaidaombmp.supabase.co/functions/v1/ip-guard`
+
+Call it directly from the browser (not through a server proxy) so Supabase Edge can observe the connecting client address. The request body should include the same browser session UUID:
+
+```ts
+const response = await fetch(
+  'https://nzaelikbjumaidaombmp.supabase.co/functions/v1/ip-guard',
+  {
+    method: 'POST',
+    headers: {
+      apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ session_id: browserSessionUuid }),
+  },
+);
+if (response.status === 403) {
+  // Stop the session: the visitor's IP address is restricted.
+}
+```
+
+The Edge Function uses the trusted Cloudflare connecting-IP header, checks the IP restriction table, and associates only a short SHA-256 fingerprint with the live session. It does not accept arbitrary `X-Forwarded-For` values and does not store raw IPs. The admin page can block an active visitor's fingerprint directly. A network may be shared by multiple people.
+
+**Important:** Until the frontend calls both `nl_visitor_heartbeat` and `ip-guard`, the Live visitors tab will remain empty and active IPs will not be captured. The deployed function is an enforcement endpoint; the public app must call it and stop requests when it returns HTTP 403.
+
+## Moderation behavior
+
+- **Rank:** application rank stored separately from Supabase console permissions.
+- **Mute:** stored with expiry and enforced on inserts into `public.chat_messages`. Any other chat/AI API endpoint must also check the moderation state before processing requests.
+- **Ban:** marks `profiles.banned`, sets Supabase Auth `banned_until` (100-year expiry for permanent bans), and revokes refreshable sessions.
+- **Kick:** revokes current Supabase Auth sessions. For guests, the browser session UUID is blocked for 24 hours.
+- **IP restriction:** temporary; SHA-256 fingerprint only. A visitor fingerprint can be blocked from the Live visitors tab. Shared networks can affect multiple people.
+
+## Security notes
+
+Never expose the Supabase service-role key in frontend code. Keep the `ip-guard` function's service-role credential in Supabase's managed Edge Function environment. The moderation tables have RLS enabled and no direct client table policies; access is through the checked RPC functions.
