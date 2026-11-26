@@ -15,9 +15,9 @@ All moderation RPCs validate the existing custom admin session token against `ad
 
 ## Open the console
 
-Sign in through the existing Nameless Labs dashboard, then open **Moderation center**, or visit `/admin-namelesslabs/moderation.html`.
+Sign in through the Nameless Labs console, then open **Moderation center**, or visit `/admin-namelesslabs/moderation.html`. The moderation page asks for the matching Supabase `admin_accounts` username/password as a second verification step and stores only its short-lived 12-hour admin token in the current browser session.
 
-The page uses the existing `nl_session` session object and calls these live RPCs:
+The page validates the existing `nl_session`, then verifies the operator through `admin_login` before calling these live RPCs:
 - `nl_moderation_overview`
 - `nl_moderate_user`
 - `nl_kick_guest`
