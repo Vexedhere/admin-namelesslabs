@@ -22,6 +22,13 @@ create table if not exists public.live_visitors (
 );
 create index if not exists live_visitors_seen_idx on public.live_visitors(last_seen desc);
 
+create table if not exists public.blocked_guest_sessions (
+  session_id uuid primary key,
+  expires_at timestamptz not null default now() + interval '24 hours',
+  reason text not null default 'Kicked by an administrator',
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.ip_restrictions (
   id bigint generated always as identity primary key,
   ip_digest text not null unique,
@@ -45,6 +52,7 @@ create table if not exists public.moderation_audit (
 alter table public.user_moderation enable row level security;
 alter table public.live_visitors enable row level security;
 alter table public.ip_restrictions enable row level security;
+alter table public.blocked_guest_sessions enable row level security;
 alter table public.moderation_audit enable row level security;
 -- Deliberately no direct client policies. All access is through checked RPCs.
 
@@ -94,7 +102,7 @@ begin
       values(p_user_id,p_value,p_reason,auth.uid())
       on conflict(user_id) do update set rank=excluded.rank,reason=excluded.reason,updated_by=auth.uid(),updated_at=now();
   elsif p_action in ('mute','ban') then
-    if p_value='permanent' then until_at := null;
+    if p_value='permanent' then until_at := '9999-12-31 23:59:59+00'::timestamptz;
     else
       if p_value !~ '^[0-9]+$' or p_value::int not in (5,15,60,1440,10080,43200) then raise exception 'Invalid duration'; end if;
       until_at := now() + make_interval(mins => p_value::int);
@@ -157,6 +165,10 @@ $$;
 create or replace function public.visitor_heartbeat(p_session_id uuid, p_name text default 'Guest', p_user_agent text default null)
 returns void language plpgsql security definer set search_path = public, auth as $$
 begin
+  if exists(select 1 from public.blocked_guest_sessions where session_id=p_session_id and expires_at>now()) then
+    raise exception 'This visitor session has been kicked';
+  end if;
+  delete from public.blocked_guest_sessions where expires_at<=now();
   insert into public.live_visitors(session_id,user_id,display_name,user_agent,last_seen)
   values(p_session_id,auth.uid(),left(coalesce(p_name,'Guest'),80),left(coalesce(p_user_agent,''),300),now())
   on conflict(session_id) do update set user_id=auth.uid(),display_name=excluded.display_name,
@@ -168,6 +180,8 @@ returns void language plpgsql security definer set search_path = public, auth as
 begin
   if not public.is_admin() then raise exception 'Not authorized'; end if;
   delete from public.live_visitors where session_id=p_session_id;
+  insert into public.blocked_guest_sessions(session_id,expires_at) values(p_session_id,now()+interval '24 hours')
+    on conflict(session_id) do update set expires_at=excluded.expires_at;
   insert into public.moderation_audit(actor_id,target_session_id,action)
   values(auth.uid(),p_session_id,'guest_kick');
 end $$;
