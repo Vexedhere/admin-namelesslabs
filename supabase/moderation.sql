@@ -65,7 +65,7 @@ begin
   select jsonb_build_object(
     'users', coalesce((select jsonb_agg(jsonb_build_object(
       'id',p.id,'email',p.email,'name',p.full_name,'created_at',p.created_at,
-      'last_sign_in_at',p.last_sign_in_at,'rank',coalesce(m.rank,'User'),
+      'last_sign_in_at',p.last_sign_in_at,'rank',coalesce(m.rank,'User'),'is_admin',exists(select 1 from public.admin_roles ar where ar.user_id=p.id),
       'muted_until',m.muted_until,'banned_until',m.banned_until,'reason',m.reason
     ) order by p.created_at desc) from public.profiles p
       left join public.user_moderation m on m.user_id=p.id), '[]'::jsonb),
