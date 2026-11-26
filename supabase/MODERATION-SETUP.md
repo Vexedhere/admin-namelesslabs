@@ -25,9 +25,9 @@ The page uses the existing `nl_session` session object and calls these live RPCs
 - `nl_restrict_visitor_ip`
 - `nl_remove_ip_restriction`
 
-## Visitor tracking integration still required
+## Visitor tracking frontend integration
 
-The public NamelessAI frontend must send a heartbeat every 30 seconds or so using the signed-in Supabase client (or anonymous client for guests):
+The NamelessAI frontend integration has been committed to `Vexedhere/namelessai` (heartbeat + Edge IP guard on a 30-second interval, plus server-side kick/ban/mute checks on `/api/chat`). Those changes become active after the main app's deployment succeeds. The underlying heartbeat call is:
 
 ```ts
 const { data, error } = await supabase.rpc('nl_visitor_heartbeat', {
@@ -42,7 +42,7 @@ if (error || data?.allowed === false) {
 
 Generate `browserSessionUuid` once per browser tab/session using `crypto.randomUUID()` and keep it in `sessionStorage`. The database derives the authenticated user from the Supabase JWT; it does not trust a caller-supplied user ID.
 
-## IP capture and enforcement integration still required
+## IP capture and enforcement
 
 The deployed Edge Function endpoint is:
 
@@ -69,7 +69,7 @@ if (response.status === 403) {
 
 The Edge Function uses the trusted Cloudflare connecting-IP header, checks the IP restriction table, and associates only a short SHA-256 fingerprint with the live session. It does not accept arbitrary `X-Forwarded-For` values and does not store raw IPs. The admin page can block an active visitor's fingerprint directly. A network may be shared by multiple people.
 
-**Important:** Until the frontend calls both `nl_visitor_heartbeat` and `ip-guard`, the Live visitors tab will remain empty and active IPs will not be captured. The deployed function is an enforcement endpoint; the public app must call it and stop requests when it returns HTTP 403.
+**Important:** The frontend source now calls both endpoints, but the Live visitors tab will not populate until the updated NamelessAI deployment is live and visitors load it. The app checks the Edge Function response and blocks the UI on HTTP 403.
 
 ## Moderation behavior
 
