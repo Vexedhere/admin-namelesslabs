@@ -32,6 +32,7 @@ if(!MOD_TOKEN){
  return;
 }
 const isOwner=()=>String(D.admin_role||'').toUpperCase()==='OWNER';
+$('addIp').disabled=true;
 async function rpc(name,args={}){return rawRpc(name,{...args,p_token:MOD_TOKEN})}
 const fmt=t=>t?new Date(t).toLocaleString():'—';
 const liveUntil=t=>t?(new Date(t)>new Date()?'Until '+fmt(t):'Expired'):'—';
