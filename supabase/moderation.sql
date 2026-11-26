@@ -186,6 +186,9 @@ begin
   values(auth.uid(),p_session_id,'guest_kick');
 end $$;
 
+revoke all on function public.is_ip_restricted(text) from public, anon, authenticated;
+grant execute on function public.is_ip_restricted(text) to service_role;
+
 revoke all on function public.admin_moderation_overview() from public, anon;
 revoke all on function public.admin_moderate_user(uuid,text,text,text) from public, anon;
 revoke all on function public.admin_restrict_ip(text,integer,text) from public, anon;
