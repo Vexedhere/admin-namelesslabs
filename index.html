@@ -156,7 +156,7 @@ document.addEventListener("click",async e=>{
  const a=e.target.closest("[data-act]");if(!a)return;
  const act=a.dataset.act,u=a.dataset.user;
  try{
-  if(act==="ban"){if(!confirm("Change this account ban status?"))return;await call("set-ban",{user_id:u,banned:a.dataset.banned==="true",reason:"Admin action"});toast("Account status updated");await load();await inspectSession(a.dataset.session||data.visitors.find(v=>v.user_id===u)?.session_id);}
+  if(act==="ban"){if(!confirm("Change this account ban status?"))return;await call("set-ban",{user_id:u,banned:a.dataset.banned==="true",reason:"Admin action"});toast("Account status updated");await load();await inspectSession(u,true);}
   if(act==="kick"){if(!confirm("Kick this browser session?"))return;await call("kick-session",{session_id:a.dataset.session,reason:"Kicked by administrator"});toast("Session kicked");await load();$("personDrawer").classList.add("hidden");}
   if(act==="mute"){await call("mute-user",{user_id:u,minutes:60,reason:"Muted by administrator"});toast("User muted for one hour");}
   if(act==="rank"){const rank=prompt("Rank: Owner, Admin, Moderator, Premium, User","User");if(rank){await call("set-rank",{user_id:u,rank});toast("Rank updated");}}
