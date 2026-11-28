@@ -151,7 +151,8 @@ $("logout").addEventListener("click",async()=>{try{await call("logout")}catch(e)
 $("userSearch").addEventListener("input",renderUsers);$("tierFilter").addEventListener("change",renderUsers);$("visitorSearch").addEventListener("input",renderVisitors);$("visitorFilter").addEventListener("change",renderVisitors);$("personDrawer").addEventListener("click",e=>{if(e.target.id==="personDrawer"||e.target.closest("[data-close-person]"))$("personDrawer").classList.add("hidden");});
 
 document.addEventListener("click",async e=>{
- const person=e.target.closest("[data-inspect-user]");if(person){inspectSession(person.dataset.inspectUser,true);return}\n const inspect=e.target.closest("[data-inspect-session]");if(inspect){inspectSession(inspect.dataset.inspectSession);return}
+ const person=e.target.closest("[data-inspect-user]");if(person){inspectSession(person.dataset.inspectUser,true);return}
+ const inspect=e.target.closest("[data-inspect-session]");if(inspect){inspectSession(inspect.dataset.inspectSession);return}
  const a=e.target.closest("[data-act]");if(!a)return;
  const act=a.dataset.act,u=a.dataset.user;
  try{
