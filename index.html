@@ -33,6 +33,7 @@
   <nav class="space-y-1">
    <a class="nav-item active" href="#overview" data-view="overview"><i data-lucide="layout-dashboard"></i><span class="nav-label">Overview</span></a>
    <a class="nav-item" href="#users" data-view="users"><i data-lucide="users"></i><span class="nav-label">Users & tiers</span></a>
+   <a class="nav-item" href="#visitors" data-view="visitors"><i data-lucide="radar"></i><span class="nav-label">Live visitors</span></a>
    <a class="nav-item" href="#models" data-view="models"><i data-lucide="workflow"></i><span class="nav-label">Model router</span></a>
    <a class="nav-item" href="#usage" data-view="usage"><i data-lucide="chart-no-axes-combined"></i><span class="nav-label">Usage & quotas</span></a>
    <a class="nav-item" href="#flags" data-view="flags"><i data-lucide="sliders-horizontal"></i><span class="nav-label">Feature flags</span></a>
@@ -61,6 +62,11 @@
     <div class="mb-6"><div class="eyebrow">IDENTITY & ACCESS</div><h1 class="text-3xl font-semibold tracking-tight mt-2">Users & tiers</h1><p class="muted mt-2">Manage membership access for registered NamelessAI accounts.</p></div>
     <div class="panel"><div class="panel-head"><div><div class="panel-title">All accounts</div><div class="muted text-xs mt-1">Tier changes are saved through the existing admin API.</div></div><span class="pill" id="allUserCount">— accounts</span></div><div class="p-4 flex flex-wrap gap-2"><input class="field max-w-sm" id="userSearch" placeholder="Search email or username..."><select class="field max-w-[180px]" id="tierFilter"><option value="">All tiers</option><option value="FREE">Free</option><option value="BASE">Base · ₹399</option><option value="PLUS">Plus · ₹879</option><option value="PRO">Pro · ₹1,799</option></select></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>Tier</th><th>3h image pool</th><th>Joined</th><th>Account</th><th>Change tier</th></tr></thead><tbody id="userRows"><tr><td colspan="6" class="muted text-center py-8">Loading accounts...</td></tr></tbody></table></div></div>
    </section>
+   <section id="view-visitors" class="view">
+    <div class="mb-6"><div class="eyebrow">LIVE PRESENCE</div><h1 class="text-3xl font-semibold tracking-tight mt-2">Visitors & sessions</h1><p class="muted mt-2">Registered members and anonymous visitors, their current page, activity and session controls.</p></div>
+    <div class="kpi-grid mb-4"><article class="panel p-4"><div class="muted text-xs">Active sessions</div><div class="metric mono mt-3" id="visitorActive">—</div></article><article class="panel p-4"><div class="muted text-xs">Signed in</div><div class="metric mono mt-3" id="visitorMembers">—</div></article><article class="panel p-4"><div class="muted text-xs">Guests</div><div class="metric mono mt-3" id="visitorGuests">—</div></article><article class="panel p-4"><div class="muted text-xs">Kicked</div><div class="metric mono mt-3" id="visitorKicked">—</div></article></div>
+    <div class="panel"><div class="panel-head"><div class="panel-title">Live visitor feed</div><span class="pill green">Auto refresh · 15s</span></div><div class="p-4 flex gap-2"><input class="field max-w-sm" id="visitorSearch" placeholder="Search visitor, page or activity..."><select class="field max-w-[180px]" id="visitorFilter"><option value="ALL">All sessions</option><option value="MEMBER">Signed in</option><option value="GUEST">Guests</option><option value="ACTIVE">Active now</option><option value="KICKED">Kicked</option></select></div><div class="table-wrap"><table><thead><tr><th>Visitor</th><th>Current page</th><th>Activity</th><th>Last seen</th><th>Session</th></tr></thead><tbody id="visitorRows"><tr><td colspan="5" class="muted text-center py-8">Loading...</td></tr></tbody></table></div></div>
+   </section>
    <section id="view-models" class="view">
     <div class="mb-6"><div class="eyebrow">INFERENCE ROUTING</div><h1 class="text-3xl font-semibold tracking-tight mt-2">Model router</h1><p class="muted mt-2">Control model availability and tier access. Changes shown here are local until a model-control API is configured.</p></div><div id="modelsGrid" class="model-grid"></div>
    </section>
@@ -81,6 +87,7 @@
   </div>
  </main>
 </div>
+<div id="personDrawer" class="hidden fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm"><div class="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-[#0d0d10] shadow-2xl"><div id="personContent" class="p-6"></div></div></div>
 <div id="toast" class="toast"></div>
 <script>
 (function(){
@@ -109,8 +116,32 @@ function renderUsers(){
  const paid=(data.users||[]).filter(x=>(x.tier||"FREE").toUpperCase()!=="FREE").length;
  $("activeUsers").textContent=(data.users||[]).filter(x=>!x.banned).length;$("freeUsers").textContent=(data.users||[]).length-paid;$("paidUsers").textContent=paid;
 }
+
+function activeVisitor(v){return !v.kicked&&(Date.now()-new Date(v.last_seen).getTime())<120000}
+function renderVisitors(){
+ const all=data.visitors||[],q=($("visitorSearch")?.value||"").toLowerCase(),f=$("visitorFilter")?.value||"ALL";
+ $("visitorActive").textContent=all.filter(activeVisitor).length;$("visitorMembers").textContent=all.filter(v=>v.user_id).length;$("visitorGuests").textContent=all.filter(v=>!v.user_id).length;$("visitorKicked").textContent=all.filter(v=>v.kicked).length;
+ const rows=all.filter(v=>{const hay=[v.display_name,v.current_path,v.current_activity,v.user_agent].join(" ").toLowerCase();return (!q||hay.includes(q))&&(f==="ALL"||(f==="MEMBER"&&!!v.user_id)||(f==="GUEST"&&!v.user_id)||(f==="ACTIVE"&&activeVisitor(v))||(f==="KICKED"&&v.kicked));}).map(v=>'<tr><td><button class="font-semibold hover:text-violet-300" data-inspect-session="'+esc(v.session_id)+'">'+esc(v.display_name||"Guest")+'</button><div class="muted text-[10px]">'+(v.user_id?"Signed-in":"Anonymous")+'</div></td><td class="mono">'+esc(v.current_path||"/")+'</td><td><span class="pill violet">'+esc(v.current_activity||"Browsing")+'</span></td><td><span class="pill '+(activeVisitor(v)?"green":v.kicked?"rose":"")+'">'+(activeVisitor(v)?"Online":v.kicked?"Kicked":"Away")+'</span><div class="muted text-[10px]">'+new Date(v.last_seen).toLocaleString()+'</div></td><td><button class="btn !py-1 !px-2" data-inspect-session="'+esc(v.session_id)+'">Inspect</button></td></tr>').join("");
+ $("visitorRows").innerHTML=rows||'<tr><td colspan="5" class="muted text-center py-8">No matching sessions.</td></tr>';
+}
+async function inspectSession(id){
+ try{
+  const j=await call("person-detail",{session_id:id}),v=j.visitor||{},p=j.profile||{},uid=p.id||v.user_id||"",email=p.email||j.auth_user?.email||"";
+  const threads=(j.threads||[]).map(t=>'<div class="border-b border-white/5 py-2 text-xs">'+esc(t.title||"Untitled chat")+' <span class="muted float-right">'+new Date(t.updated_at).toLocaleString()+'</span></div>').join("")||'<p class="muted text-xs">No saved chat sessions.</p>';
+  const sessions=(j.sessions||[]).map(t=>'<div class="border-b border-white/5 py-2 text-xs"><span class="mono">'+esc(t.current_path||"/")+'</span> · '+esc(t.current_activity||"Browsing")+' <span class="muted float-right">'+new Date(t.last_seen).toLocaleString()+'</span></div>').join("");
+  $("personContent").innerHTML='<div class="flex justify-between gap-3"><div><div class="eyebrow">VISITOR PROFILE</div><h2 class="text-2xl font-semibold mt-2">'+esc(p.display_name||v.display_name||"Guest")+'</h2><p class="muted text-xs mt-1">'+esc(email||"Anonymous visitor")+'</p></div><button class="btn" data-close-person>Close ✕</button></div>'+
+   '<div class="grid grid-cols-2 gap-2 mt-5">'+[['Tier',p.tier||"GUEST"],['Rank',j.moderation?.rank||"User"],['Account',p.banned?"Banned":p.id?"Active":"Guest"],['Last seen',v.last_seen?new Date(v.last_seen).toLocaleString():"—"]].map(x=>'<div class="panel p-3"><div class="eyebrow">'+x[0]+'</div><div class="font-semibold mt-2 text-sm">'+esc(x[1])+'</div></div>').join("")+'</div>'+
+   '<div class="panel p-4 mt-4"><div class="panel-title mb-3">What they are doing</div><div class="text-sm">Page: <span class="mono">'+esc(v.current_path||"—")+'</span></div><div class="text-sm mt-2">Activity: '+esc(v.current_activity||"Browsing")+'</div><div class="muted text-xs mt-2 break-all">'+esc(v.user_agent||"")+'</div></div>'+
+   '<div class="panel p-4 mt-4"><div class="panel-title mb-3">Actions</div><div class="grid grid-cols-2 gap-2">'+(uid?'<button class="btn" data-act="ban" data-user="'+uid+'" data-banned="'+(!p.banned)+'">'+(p.banned?"Unban":"Ban account")+'</button><button class="btn" data-act="mute" data-user="'+uid+'">Mute 1 hour</button><button class="btn" data-act="rank" data-user="'+uid+'">Change rank</button><button class="btn" data-act="tier" data-user="'+uid+'">Change tier</button>':'')+(v.session_id&&!v.kicked?'<button class="btn !text-rose-300" data-act="kick" data-session="'+v.session_id+'">Kick session</button>':'')+(v.ip_digest?'<button class="btn !text-rose-300" data-act="ip" data-digest="'+v.ip_digest+'">Restrict IP fingerprint</button>':'')+'</div></div>'+
+   (uid?'<div class="panel p-4 mt-4"><div class="panel-title mb-3">Send email</div><form id="personEmail" class="space-y-2"><input class="field" id="mailTo" type="email" value="'+esc(email)+'" required placeholder="Email"><input class="field" id="mailSubject" required placeholder="Subject"><textarea class="field min-h-28" id="mailBody" required placeholder="Write a message"></textarea><button class="btn primary">Send email</button></form><p class="muted text-[10px] mt-2">Requires Resend email secrets configured in Supabase.</p></div>':'')+
+   '<div class="panel p-4 mt-4"><div class="panel-title mb-3">Recent sessions</div>'+(sessions||'<p class="muted text-xs">No other sessions.</p>')+'</div><div class="panel p-4 mt-4"><div class="panel-title mb-3">Recent saved chats</div>'+threads+'</div>';
+  $("personDrawer").classList.remove("hidden");
+  $("personEmail")?.addEventListener("submit",async e=>{e.preventDefault();try{await call("send-email",{user_id:uid,to:$("mailTo").value,subject:$("mailSubject").value,body:$("mailBody").value});toast("Email sent");}catch(err){toast(err.message)}});
+ }catch(e){toast(e.message)}
+}
+
 function renderFlags(){const flags=[["Image Generation","Allow image generation requests"],["File Uploads","Enable document and media uploads"],["Web Search","Allow external web search"],["Maintenance Mode","Show maintenance state to users"]];$("flagList").innerHTML=flags.map((f,i)=>'<div class="flex items-center justify-between gap-4 p-5"><div><div class="font-semibold text-sm">'+f[0]+'</div><div class="muted text-xs mt-1">'+f[1]+'</div></div><input type="checkbox" class="switch" data-flag="'+i+'" '+(i===3?"":"checked")+' aria-label="'+f[0]+'"></div>').join("")}
-async function load(){try{const j=await call("overview");data=j;showApp(j);renderUsers();$("paymentCount")&&($("paymentCount").textContent=(data.payments||[]).length+" submissions");toast("Account data refreshed")}catch(e){toast(e.message);if(/session|sign in|unauthorized/i.test(e.message))showLogin()}}
+async function load(){try{const j=await call("overview");data=j;showApp(j);renderUsers();renderVisitors();$("paymentCount")&&($("paymentCount").textContent=(data.payments||[]).length+" submissions");toast("Account data refreshed")}catch(e){toast(e.message);if(/session|sign in|unauthorized/i.test(e.message))showLogin()}}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginBtn").disabled=true;$("loginError").classList.add("hidden");try{const j=await call("login",{username:$("username").value.trim(),password:$("password").value},false);token=j.token;sessionStorage.setItem("nl_admin_session",token);adminName=j.username;$("password").value="";showApp(j);await load()}catch(err){$("loginError").textContent=err.message;$("loginError").classList.remove("hidden")}finally{$("loginBtn").disabled=false}});
 function navigate(view){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));$("view-"+view)?.classList.add("active");document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active",n.dataset.view===view));if(view==="users")renderUsers();window.location.hash=view}
 document.querySelectorAll(".nav-item").forEach(n=>n.addEventListener("click",e=>{e.preventDefault();navigate(n.dataset.view)}));
@@ -118,7 +149,22 @@ document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=
 $("collapseBtn").addEventListener("click",()=>$("appView").classList.toggle("collapsed"));
 $("refresh").addEventListener("click",load);
 $("logout").addEventListener("click",async()=>{try{await call("logout")}catch(e){}showLogin()});
-$("userSearch").addEventListener("input",renderUsers);$("tierFilter").addEventListener("change",renderUsers);
+$("userSearch").addEventListener("input",renderUsers);$("tierFilter").addEventListener("change",renderUsers);$("visitorSearch").addEventListener("input",renderVisitors);$("visitorFilter").addEventListener("change",renderVisitors);$("personDrawer").addEventListener("click",e=>{if(e.target.id==="personDrawer"||e.target.closest("[data-close-person]"))$("personDrawer").classList.add("hidden");});
+
+document.addEventListener("click",async e=>{
+ const inspect=e.target.closest("[data-inspect-session]");if(inspect){inspectSession(inspect.dataset.inspectSession);return}
+ const a=e.target.closest("[data-act]");if(!a)return;
+ const act=a.dataset.act,u=a.dataset.user;
+ try{
+  if(act==="ban"){if(!confirm("Change this account ban status?"))return;await call("set-ban",{user_id:u,banned:a.dataset.banned==="true",reason:"Admin action"});toast("Account status updated");await load();await inspectSession(a.dataset.session||data.visitors.find(v=>v.user_id===u)?.session_id);}
+  if(act==="kick"){if(!confirm("Kick this browser session?"))return;await call("kick-session",{session_id:a.dataset.session,reason:"Kicked by administrator"});toast("Session kicked");await load();$("personDrawer").classList.add("hidden");}
+  if(act==="mute"){await call("mute-user",{user_id:u,minutes:60,reason:"Muted by administrator"});toast("User muted for one hour");}
+  if(act==="rank"){const rank=prompt("Rank: Owner, Admin, Moderator, Premium, User","User");if(rank){await call("set-rank",{user_id:u,rank});toast("Rank updated");}}
+  if(act==="tier"){const tier=prompt("Tier: FREE, BASE, PLUS, PRO","FREE");if(tier){await call("set-tier",{user_id:u,tier});toast("Tier updated");await load();}}
+  if(act==="ip"){if(!confirm("Restrict this network fingerprint for 24 hours? Other people on the same network may also be affected."))return;await call("restrict-ip",{ip_digest:a.dataset.digest,hours:24,reason:"Admin network restriction"});toast("Network restricted");}
+ }catch(err){toast(err.message)}
+});
+
 document.addEventListener("change",async e=>{const id=e.target.dataset.tier;if(id&&!e.target.value)return;if(id){const old=(data.users||[]).find(u=>String(u.id)===String(id));const previous=old?.tier||"FREE";try{await call("set-tier",{user_id:id,tier:e.target.value});toast("Membership tier updated");await load()}catch(err){e.target.value=previous;toast(err.message)}}else if(e.target.dataset.model!==undefined){toast("Model routing API is not configured — preview only")}else if(e.target.dataset.modelTier!==undefined){toast("Model tier routing API is not configured — preview only")}else if(e.target.dataset.flag!==undefined){toast("Feature flag API is not configured — preview only")}});
 $("announcementForm").addEventListener("submit",async e=>{e.preventDefault();const b=$("publishAnnouncement");b.disabled=true;try{await call("announcement-create",{title:$("announcementTitle").value,body:$("announcementBody").value,category:$("announcementCategory").value});e.target.reset();toast("Announcement published");await load()}catch(err){toast(err.message)}finally{b.disabled=false}});
 document.querySelectorAll("[data-range]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-range]").forEach(x=>{x.classList.remove("bg-white/10","text-zinc-100");x.classList.add("text-zinc-500")});b.classList.add("bg-white/10","text-zinc-100");b.classList.remove("text-zinc-500");toast("Range filter selected — telemetry source required")}));
@@ -126,7 +172,7 @@ $("severityFilters").addEventListener("click",e=>{const b=e.target.closest("[dat
 document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();const q=prompt("Go to: overview, users, models, usage, flags, logs");if(q&&["overview","users","models","usage","flags","logs"].includes(q.toLowerCase()))navigate(q.toLowerCase())}});
 renderModels();renderFlags();
 if(window.lucide)lucide.createIcons();
-if(token){showApp();load()}else showLogin();
+if(token){showApp();load();setInterval(()=>{if(token&&!document.hidden)load()},15000)}else showLogin();
 })();
 </script>
 </body></html>
