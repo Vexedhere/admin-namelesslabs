@@ -141,7 +141,7 @@ async function inspectSession(id){
 }
 
 function renderFlags(){const flags=[["Image Generation","Allow image generation requests"],["File Uploads","Enable document and media uploads"],["Web Search","Allow external web search"],["Maintenance Mode","Show maintenance state to users"]];$("flagList").innerHTML=flags.map((f,i)=>'<div class="flex items-center justify-between gap-4 p-5"><div><div class="font-semibold text-sm">'+f[0]+'</div><div class="muted text-xs mt-1">'+f[1]+'</div></div><input type="checkbox" class="switch" data-flag="'+i+'" '+(i===3?"":"checked")+' aria-label="'+f[0]+'"></div>').join("")}
-async function load(){try{const j=await call("overview");data=j;showApp(j);renderUsers();renderVisitors();$("paymentCount")&&($("paymentCount").textContent=(data.payments||[]).length+" submissions");toast("Account data refreshed")}catch(e){toast(e.message);if(/session|sign in|unauthorized/i.test(e.message))showLogin()}}
+async function load(silent=false){try{const j=await call("overview");data=j;showApp(j);renderUsers();renderVisitors();$("paymentCount")&&($("paymentCount").textContent=(data.payments||[]).length+" submissions");if(!silent)toast("Account data refreshed")}catch(e){toast(e.message);if(/session|sign in|unauthorized/i.test(e.message))showLogin()}}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginBtn").disabled=true;$("loginError").classList.add("hidden");try{const j=await call("login",{username:$("username").value.trim(),password:$("password").value},false);token=j.token;sessionStorage.setItem("nl_admin_session",token);adminName=j.username;$("password").value="";showApp(j);await load()}catch(err){$("loginError").textContent=err.message;$("loginError").classList.remove("hidden")}finally{$("loginBtn").disabled=false}});
 function navigate(view){document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));$("view-"+view)?.classList.add("active");document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active",n.dataset.view===view));if(view==="users")renderUsers();window.location.hash=view}
 document.querySelectorAll(".nav-item").forEach(n=>n.addEventListener("click",e=>{e.preventDefault();navigate(n.dataset.view)}));
@@ -172,7 +172,7 @@ $("severityFilters").addEventListener("click",e=>{const b=e.target.closest("[dat
 document.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="k"){e.preventDefault();const q=prompt("Go to: overview, users, models, usage, flags, logs");if(q&&["overview","users","models","usage","flags","logs"].includes(q.toLowerCase()))navigate(q.toLowerCase())}});
 renderModels();renderFlags();
 if(window.lucide)lucide.createIcons();
-if(token){showApp();load();setInterval(()=>{if(token&&!document.hidden)load()},15000)}else showLogin();
+if(token){showApp();load();setInterval(()=>{if(token&&!document.hidden)load(true)},15000)}else showLogin();
 })();
 </script>
 </body></html>
